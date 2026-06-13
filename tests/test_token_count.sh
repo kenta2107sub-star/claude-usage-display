@@ -2,38 +2,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 FIXTURE="$SCRIPT_DIR/fixtures/sample_session.jsonl"
 
-# claude_usage.sh のトークン集計ロジックを直接テスト
-result=$(python3 - "$FIXTURE" <<'EOF'
-import json, sys
+# claude_usage.sh の parse_jsonl 関数をsourceして直接テスト
+source "$ROOT_DIR/claude_usage.sh"
 
-jsonl_path = sys.argv[1]
-total = 0
-with open(jsonl_path) as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if entry.get("type") != "assistant":
-            continue
-        usage = entry.get("message", {}).get("usage", {})
-        total += usage.get("input_tokens", 0)
-        total += usage.get("cache_creation_input_tokens", 0)
-        total += usage.get("cache_read_input_tokens", 0)
-        total += usage.get("output_tokens", 0)
-print(total)
-EOF
-)
+result=$(parse_jsonl "$FIXTURE")
 
-expected=13500  # 100+5000+2000+200 + 50+0+6000+150
-if [ "$result" -eq "$expected" ]; then
-    echo "PASS: token count = $result"
+# 期待: "📊 7% (13.5K/200K)" を含む出力
+if echo "$result" | grep -q "13.5K/200K"; then
+    echo "PASS: output contains expected token count: $result"
 else
-    echo "FAIL: expected $expected, got $result"
+    echo "FAIL: expected output to contain '13.5K/200K', got: $result"
     exit 1
 fi

@@ -19,22 +19,26 @@ find_session_id() {
     for session_file in "$sessions_dir"/*.json; do
         [ -f "$session_file" ] || continue
         local file_cwd
-        file_cwd=$(python3 -c "
+        file_cwd=$(python3 - "$session_file" <<'PYEOF'
 import json, sys
 try:
-    with open('$session_file') as f:
+    with open(sys.argv[1]) as f:
         d = json.load(f)
     print(d.get('cwd', ''))
-except:
+except (json.JSONDecodeError, FileNotFoundError, IOError):
     print('')
-")
+PYEOF
+)
         if [ "$file_cwd" = "$cwd" ]; then
-            python3 -c "
-import json
-with open('$session_file') as f:
-    d = json.load(f)
-print(d.get('sessionId', ''))
-"
+            python3 - "$session_file" <<'PYEOF'
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    print(d.get('sessionId', ''))
+except (json.JSONDecodeError, FileNotFoundError, IOError):
+    print('')
+PYEOF
             return 0
         fi
     done
@@ -131,4 +135,6 @@ main() {
     parse_jsonl "$jsonl_path"
 }
 
-main
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main
+fi
