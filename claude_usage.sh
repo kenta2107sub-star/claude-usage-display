@@ -20,16 +20,18 @@ find_session_id() {
         [ -f "$session_file" ] || continue
         local file_cwd
         file_cwd=$(python3 - "$session_file" <<'PYEOF'
-import json, sys
+import json, sys, unicodedata
 try:
     with open(sys.argv[1]) as f:
         d = json.load(f)
-    print(d.get('cwd', ''))
+    print(unicodedata.normalize("NFC", d.get('cwd', '')))
 except (json.JSONDecodeError, FileNotFoundError, IOError):
     print('')
 PYEOF
 )
-        if [ "$file_cwd" = "$cwd" ]; then
+        local cwd_nfc
+        cwd_nfc=$(python3 -c "import unicodedata, sys; print(unicodedata.normalize('NFC', sys.argv[1]))" "$cwd")
+        if [ "$file_cwd" = "$cwd_nfc" ]; then
             python3 - "$session_file" <<'PYEOF'
 import json, sys
 try:
@@ -45,9 +47,19 @@ PYEOF
     return 1
 }
 
-# cwdをプロジェクトパス形式（-区切り）に変換
+# cwdをプロジェクトパス形式（/と非ASCII文字を-に変換）に変換
 encode_cwd() {
-    echo "$1" | sed 's|/|-|g'
+    python3 - "$1" <<'PYEOF'
+import sys, unicodedata
+path = unicodedata.normalize("NFC", sys.argv[1])
+result = ""
+for c in path:
+    if c == "/" or ord(c) > 127:
+        result += "-"
+    else:
+        result += c
+print(result)
+PYEOF
 }
 
 # JSOLからトークン集計とリセット時間を計算
@@ -58,7 +70,7 @@ import json, sys
 from datetime import datetime, timezone, timedelta
 
 jsonl_path = sys.argv[1]
-total_tokens = 0
+last_input_tokens = 0
 first_ts = None
 
 with open(jsonl_path) as f:
@@ -73,10 +85,12 @@ with open(jsonl_path) as f:
         if entry.get("type") != "assistant":
             continue
         usage = entry.get("message", {}).get("usage", {})
-        total_tokens += usage.get("input_tokens", 0)
-        total_tokens += usage.get("cache_creation_input_tokens", 0)
-        total_tokens += usage.get("cache_read_input_tokens", 0)
-        total_tokens += usage.get("output_tokens", 0)
+        # 現在のコンテキスト使用量 = 最後のメッセージの入力トークン合計
+        last_input_tokens = (
+            usage.get("input_tokens", 0)
+            + usage.get("cache_creation_input_tokens", 0)
+            + usage.get("cache_read_input_tokens", 0)
+        )
         if first_ts is None:
             ts_str = entry.get("timestamp", "")
             if ts_str:
@@ -88,6 +102,7 @@ with open(jsonl_path) as f:
 CONTEXT_WINDOW = 200000
 RESET_HOURS = 5
 
+total_tokens = last_input_tokens
 pct = round(total_tokens / CONTEXT_WINDOW * 100)
 
 if total_tokens >= 1000:
