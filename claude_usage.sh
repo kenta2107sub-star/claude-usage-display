@@ -1,155 +1,39 @@
 #!/usr/bin/env bash
 # Claude Codeステータスライン用：トークン使用量表示スクリプト
 
-set -euo pipefail
+input=$(cat)
 
-CONTEXT_WINDOW=200000
-RESET_HOURS=5
-
-# 現在の作業ディレクトリからセッションIDを特定
-find_session_id() {
-    local cwd
-    cwd="$(pwd)"
-    local sessions_dir="$HOME/.claude/sessions"
-
-    if [ ! -d "$sessions_dir" ]; then
-        return 1
-    fi
-
-    for session_file in "$sessions_dir"/*.json; do
-        [ -f "$session_file" ] || continue
-        local file_cwd
-        file_cwd=$(python3 - "$session_file" <<'PYEOF'
-import json, sys, unicodedata
-try:
-    with open(sys.argv[1]) as f:
-        d = json.load(f)
-    print(unicodedata.normalize("NFC", d.get('cwd', '')))
-except (json.JSONDecodeError, FileNotFoundError, IOError):
-    print('')
-PYEOF
-)
-        local cwd_nfc
-        cwd_nfc=$(python3 -c "import unicodedata, sys; print(unicodedata.normalize('NFC', sys.argv[1]))" "$cwd")
-        if [ "$file_cwd" = "$cwd_nfc" ]; then
-            python3 - "$session_file" <<'PYEOF'
+python3 - "$input" <<'PYEOF'
 import json, sys
+from datetime import datetime, timezone
+
 try:
-    with open(sys.argv[1]) as f:
-        d = json.load(f)
-    print(d.get('sessionId', ''))
-except (json.JSONDecodeError, FileNotFoundError, IOError):
-    print('')
-PYEOF
-            return 0
-        fi
-    done
-    return 1
-}
+    data = json.loads(sys.argv[1])
+except (json.JSONDecodeError, IndexError, ValueError):
+    sys.exit(0)
 
-# cwdをプロジェクトパス形式（/と非ASCII文字を-に変換）に変換
-encode_cwd() {
-    python3 - "$1" <<'PYEOF'
-import sys, unicodedata
-path = unicodedata.normalize("NFC", sys.argv[1])
-result = ""
-for c in path:
-    if c == "/" or ord(c) > 127:
-        result += "-"
-    else:
-        result += c
-print(result)
-PYEOF
-}
+five_hour = data.get("rate_limits", {}).get("five_hour", {})
+used_pct = five_hour.get("used_percentage")
+resets_at = five_hour.get("resets_at")
 
-# JSOLからトークン集計とリセット時間を計算
-parse_jsonl() {
-    local jsonl_path="$1"
-    python3 - "$jsonl_path" <<'PYEOF'
-import json, sys
-from datetime import datetime, timezone, timedelta
+if used_pct is None:
+    sys.exit(0)
 
-jsonl_path = sys.argv[1]
-last_input_tokens = 0
-first_ts = None
+pct = round(used_pct)
+parts = [f"📊 {pct}%"]
 
-with open(jsonl_path) as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if entry.get("type") != "assistant":
-            continue
-        usage = entry.get("message", {}).get("usage", {})
-        # 現在のコンテキスト使用量 = 最後のメッセージの入力トークン合計
-        last_input_tokens = (
-            usage.get("input_tokens", 0)
-            + usage.get("cache_creation_input_tokens", 0)
-            + usage.get("cache_read_input_tokens", 0)
-        )
-        if first_ts is None:
-            ts_str = entry.get("timestamp", "")
-            if ts_str:
-                try:
-                    first_ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                except ValueError:
-                    pass
-
-CONTEXT_WINDOW = 200000
-RESET_HOURS = 5
-
-total_tokens = last_input_tokens
-pct = round(total_tokens / CONTEXT_WINDOW * 100)
-
-if total_tokens >= 1000:
-    tok_display = f"{total_tokens/1000:.1f}K"
-else:
-    tok_display = str(total_tokens)
-
-reset_str = ""
-if first_ts:
+if resets_at:
     now = datetime.now(timezone.utc)
-    reset_at = first_ts + timedelta(hours=RESET_HOURS)
-    remaining = reset_at - now
-    if remaining.total_seconds() > 0:
-        total_secs = int(remaining.total_seconds())
+    reset_dt = datetime.fromtimestamp(resets_at, tz=timezone.utc)
+    remaining = reset_dt - now
+    total_secs = int(remaining.total_seconds())
+    if total_secs > 0:
         h = total_secs // 3600
         m = (total_secs % 3600) // 60
         if h > 0:
-            reset_str = f"⏱ {h}h{m:02d}m でリセット"
+            parts.append(f"⏱ {h}h{m:02d}m でリセット")
         else:
-            reset_str = f"⏱ {m}m でリセット"
+            parts.append(f"⏱ {m}m でリセット")
 
-parts = [f"📊 {pct}% ({tok_display}/200K)"]
-if reset_str:
-    parts.append(reset_str)
 print(" ".join(parts))
 PYEOF
-}
-
-main() {
-    local session_id
-    session_id=$(find_session_id 2>/dev/null) || { echo ""; exit 0; }
-
-    [ -z "$session_id" ] && { echo ""; exit 0; }
-
-    local cwd_encoded
-    cwd_encoded=$(encode_cwd "$(pwd)")
-
-    local jsonl_path="$HOME/.claude/projects/${cwd_encoded}/${session_id}.jsonl"
-
-    if [ ! -f "$jsonl_path" ]; then
-        echo ""
-        exit 0
-    fi
-
-    parse_jsonl "$jsonl_path"
-}
-
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main
-fi

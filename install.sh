@@ -26,11 +26,11 @@ script_path = sys.argv[2]
 with open(settings_path) as f:
     settings = json.load(f)
 
-settings["statusline"] = script_path
+settings["statusLine"] = {"type": "command", "command": script_path}
 
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
     f.write("\n")
 
-print(f"登録完了: {settings_path} に statusline = {script_path} を設定しました")
+print(f"登録完了: {settings_path} に statusLine = {script_path} を設定しました")
 PYEOF
