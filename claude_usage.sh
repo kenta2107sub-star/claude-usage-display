@@ -18,7 +18,7 @@ five_hour = data.get("rate_limits", {}).get("five_hour", {})
 used_pct = five_hour.get("used_percentage")
 resets_at = five_hour.get("resets_at")
 
-if used_pct is None:
+if used_pct is None or not isinstance(used_pct, (int, float)):
     sys.exit(0)
 
 now_ts = time.time()
@@ -49,9 +49,13 @@ cache = {
     "updated_at": now_ts,
 }
 try:
-    tmp = cache_path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cache))
-    os.replace(tmp, cache_path)
+    import tempfile
+    with tempfile.NamedTemporaryFile(
+        mode='w', dir=cache_path.parent, delete=False, suffix='.tmp'
+    ) as tf:
+        tf.write(json.dumps(cache))
+        tmp_name = tf.name
+    os.replace(tmp_name, cache_path)
 except Exception:
     pass
 

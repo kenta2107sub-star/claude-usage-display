@@ -62,15 +62,17 @@ if [ -f "$MENUBAR_SCRIPT" ] && [ -n "$PYTHON_BIN" ]; then
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <key>StandardOutPath</key>
+    <string>$HOME/.claude/menubar_app.log</string>
     <key>StandardErrorPath</key>
     <string>$HOME/.claude/menubar_app.log</string>
 </dict>
 </plist>
 PLIST
 
-    # 既存のエージェントをアンロードしてから再ロード
-    launchctl unload "$PLIST_PATH" 2>/dev/null || true
-    launchctl load "$PLIST_PATH"
+    # 既存のエージェントを停止してから登録（bootstrap/bootout が現行API）
+    launchctl bootout "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
     echo "メニューバーアプリ登録完了: ログイン時に自動起動します"
 else
     echo "警告: python3 または menubar_app.py が見つからないためメニューバーアプリをスキップしました"

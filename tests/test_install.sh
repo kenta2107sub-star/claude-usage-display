@@ -16,7 +16,8 @@ export OSACOMPILE_STUB=1
 HOME="$TMP_DIR" bash -c '
     osacompile() { return 0; }
     osascript() { return 0; }
-    export -f osacompile osascript
+    launchctl() { return 0; }
+    export -f osacompile osascript launchctl
     bash '"$INSTALL_SCRIPT"'
 '
 

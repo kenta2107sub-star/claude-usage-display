@@ -59,7 +59,8 @@ def build_title(data, fresh):
             return f"📊 {pct}% ⏱{rem}"
         return f"📊 {pct}%"
     else:
-        age = _age_str(data.get("updated_at", 0))
+        updated_at = data.get("updated_at") or None
+        age = _age_str(updated_at) if updated_at else "不明"
         return f"📊 {pct}% ({age})"
 
 
