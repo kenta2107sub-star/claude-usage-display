@@ -4,7 +4,7 @@
 input=$(cat)
 
 python3 - "$input" <<'PYEOF'
-import json, sys
+import json, sys, time
 from datetime import datetime, timezone
 
 try:
@@ -19,21 +19,23 @@ resets_at = five_hour.get("resets_at")
 if used_pct is None:
     sys.exit(0)
 
+now_ts = time.time()
+
+# リセット時刻を過ぎていたら0%に補正
+if resets_at and now_ts >= resets_at:
+    used_pct = 0
+
 pct = round(used_pct)
 parts = [f"📊 {pct}%"]
 
-if resets_at:
-    now = datetime.now(timezone.utc)
-    reset_dt = datetime.fromtimestamp(resets_at, tz=timezone.utc)
-    remaining = reset_dt - now
-    total_secs = int(remaining.total_seconds())
-    if total_secs > 0:
-        h = total_secs // 3600
-        m = (total_secs % 3600) // 60
-        if h > 0:
-            parts.append(f"⏱ {h}h{m:02d}m でリセット")
-        else:
-            parts.append(f"⏱ {m}m でリセット")
+if resets_at and now_ts < resets_at:
+    remaining = int(resets_at - now_ts)
+    h = remaining // 3600
+    m = (remaining % 3600) // 60
+    if h > 0:
+        parts.append(f"⏱ {h}h{m:02d}m でリセット")
+    else:
+        parts.append(f"⏱ {m}m でリセット")
 
 print(" ".join(parts))
 PYEOF
