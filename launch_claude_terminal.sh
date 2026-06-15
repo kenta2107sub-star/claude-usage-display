@@ -7,14 +7,14 @@ TRUSTED_DIR="$HOME/Desktop/作業フォルダ/Claude/個人開発/claude-usage-d
 # ログイン直後はmacOSのセッション復元が終わるまで待つ
 sleep 5
 
-# 既にclaudeが起動していれば何もしない
-if pgrep -f "$CLAUDE_BIN" > /dev/null 2>&1; then
-    exit 0
-fi
-
 osascript <<APPLESCRIPT
 tell application "Terminal"
     activate
-    do script "cd \"$TRUSTED_DIR\" && $CLAUDE_BIN"
+    -- 既存ウィンドウがあればそこでclaudeを起動、なければ新規ウィンドウ
+    if (count of windows) > 0 then
+        do script "cd \"$TRUSTED_DIR\" && $CLAUDE_BIN" in front window
+    else
+        do script "cd \"$TRUSTED_DIR\" && $CLAUDE_BIN"
+    end if
 end tell
 APPLESCRIPT
