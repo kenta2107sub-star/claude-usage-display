@@ -34,3 +34,41 @@ with open(settings_path, "w") as f:
 
 print(f"登録完了: {settings_path} に statusLine = {script_path} を設定しました")
 PYEOF
+
+# LaunchAgent でメニューバーアプリを自動起動登録
+MENUBAR_SCRIPT="$SCRIPT_DIR/menubar_app.py"
+LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+PLIST_PATH="$LAUNCH_AGENTS_DIR/com.claude-usage.menubar.plist"
+PYTHON_BIN="$(which python3.14 2>/dev/null || which python3 2>/dev/null)"
+
+if [ -f "$MENUBAR_SCRIPT" ] && [ -n "$PYTHON_BIN" ]; then
+    mkdir -p "$LAUNCH_AGENTS_DIR"
+    cat > "$PLIST_PATH" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.claude-usage.menubar</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>$PYTHON_BIN</string>
+        <string>$MENUBAR_SCRIPT</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>$HOME/.claude/menubar_app.log</string>
+</dict>
+</plist>
+PLIST
+
+    # 既存のエージェントをアンロードしてから再ロード
+    launchctl unload "$PLIST_PATH" 2>/dev/null || true
+    launchctl load "$PLIST_PATH"
+    echo "メニューバーアプリ登録完了: ログイン時に自動起動します"
+else
+    echo "警告: python3.14 または menubar_app.py が見つからないためメニューバーアプリをスキップしました"
+fi

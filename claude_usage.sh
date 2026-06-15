@@ -28,14 +28,29 @@ if resets_at and now_ts >= resets_at:
 pct = round(used_pct)
 parts = [f"📊 {pct}%"]
 
+remaining_secs = 0
 if resets_at and now_ts < resets_at:
-    remaining = int(resets_at - now_ts)
-    h = remaining // 3600
-    m = (remaining % 3600) // 60
+    remaining_secs = int(resets_at - now_ts)
+    h = remaining_secs // 3600
+    m = (remaining_secs % 3600) // 60
     if h > 0:
         parts.append(f"⏱ {h}h{m:02d}m でリセット")
     else:
         parts.append(f"⏱ {m}m でリセット")
+
+# メニューバーアプリ用キャッシュを書き出す
+import os, pathlib
+cache_path = pathlib.Path.home() / ".claude" / "claude_usage_cache.json"
+cache = {
+    "used_percentage": pct,
+    "resets_at": resets_at,
+    "remaining_secs": remaining_secs,
+    "updated_at": now_ts,
+}
+try:
+    cache_path.write_text(json.dumps(cache))
+except Exception:
+    pass
 
 print(" ".join(parts))
 PYEOF
