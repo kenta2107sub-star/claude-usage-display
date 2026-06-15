@@ -82,9 +82,17 @@ APP_PATH="$HOME/Applications/ClaudeUsageCLI.app"
 
 mkdir -p "$HOME/Applications"
 osacompile -o "$APP_PATH" - <<APPLESCRIPT
+-- ログイン後のセッション復元を待つ
+delay 5
+
 tell application "Terminal"
     activate
-    do script "cd '$SCRIPT_DIR' && $CLAUDE_BIN"
+    -- 既存ウィンドウがあればそこで起動、なければ新規ウィンドウ
+    if (count of windows) > 0 then
+        do script "cd '$SCRIPT_DIR' && $CLAUDE_BIN" in front window
+    else
+        do script "cd '$SCRIPT_DIR' && $CLAUDE_BIN"
+    end if
 end tell
 APPLESCRIPT
 
