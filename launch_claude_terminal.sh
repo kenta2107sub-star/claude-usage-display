@@ -2,7 +2,7 @@
 # ログイン時にTerminalでClaude CLIを起動する（未起動時のみ）
 
 CLAUDE_BIN="$HOME/.local/bin/claude"
-TRUSTED_DIR="$HOME/Desktop/作業フォルダ/Claude/個人開発/claude-usage-display"
+TRUSTED_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ログイン直後はmacOSのセッション復元が終わるまで待つ
 sleep 5

@@ -11,8 +11,14 @@ TMP_CLAUDE_HOME="$TMP_DIR/.claude"
 mkdir -p "$TMP_CLAUDE_HOME"
 echo "{}" > "$TMP_CLAUDE_HOME/settings.json"
 
-# HOME を一時的に差し替えてinstall.shを実行
-HOME="$TMP_DIR" bash "$INSTALL_SCRIPT"
+# osacompile/osascript をスタブ化してGUI操作をスキップ
+export OSACOMPILE_STUB=1
+HOME="$TMP_DIR" bash -c '
+    osacompile() { return 0; }
+    osascript() { return 0; }
+    export -f osacompile osascript
+    bash '"$INSTALL_SCRIPT"'
+'
 
 # settings.jsonにstatuslineが登録されているか確認
 result=$(python3 -c "

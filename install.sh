@@ -13,7 +13,7 @@ if [ ! -f "$SCRIPT_PATH" ]; then
 fi
 
 if [ ! -f "$SETTINGS_FILE" ]; then
-    echo "{}" > "$SETTINGS_FILE"
+    printf '{}' > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
 fi
 
 # 既存のsettings.jsonにstatuslineキーをマージ
@@ -42,7 +42,7 @@ PYEOF
 MENUBAR_SCRIPT="$SCRIPT_DIR/menubar_app.py"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 PLIST_PATH="$LAUNCH_AGENTS_DIR/com.claude-usage.menubar.plist"
-PYTHON_BIN="$(which python3.14 2>/dev/null || which python3 2>/dev/null)"
+PYTHON_BIN="$(which python3 2>/dev/null)"
 
 if [ -f "$MENUBAR_SCRIPT" ] && [ -n "$PYTHON_BIN" ]; then
     mkdir -p "$LAUNCH_AGENTS_DIR"
@@ -73,7 +73,7 @@ PLIST
     launchctl load "$PLIST_PATH"
     echo "メニューバーアプリ登録完了: ログイン時に自動起動します"
 else
-    echo "警告: python3.14 または menubar_app.py が見つからないためメニューバーアプリをスキップしました"
+    echo "警告: python3 または menubar_app.py が見つからないためメニューバーアプリをスキップしました"
 fi
 
 # AppleScriptアプリをコンパイルしてログイン項目に登録
