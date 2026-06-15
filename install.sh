@@ -73,33 +73,19 @@ else
     echo "警告: python3.14 または menubar_app.py が見つからないためメニューバーアプリをスキップしました"
 fi
 
-# LaunchAgent でログイン時にTerminal + Claude CLIを自動起動
-CLI_LAUNCHER="$SCRIPT_DIR/launch_claude_terminal.sh"
-CLI_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.cli-terminal.plist"
+# AppleScriptアプリをコンパイルしてログイン項目に登録
+CLAUDE_BIN="$HOME/.local/bin/claude"
+APP_PATH="$HOME/Applications/ClaudeUsageCLI.app"
 
-if [ -f "$CLI_LAUNCHER" ]; then
-    mkdir -p "$LAUNCH_AGENTS_DIR"
-    cat > "$CLI_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.claude-usage.cli-terminal</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/bash</string>
-        <string>$CLI_LAUNCHER</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StandardErrorPath</key>
-    <string>$HOME/.claude/cli_terminal.log</string>
-</dict>
-</plist>
-PLIST
+mkdir -p "$HOME/Applications"
+osacompile -o "$APP_PATH" - <<APPLESCRIPT
+tell application "Terminal"
+    activate
+    do script "cd '$SCRIPT_DIR' && $CLAUDE_BIN"
+end tell
+APPLESCRIPT
 
-    launchctl unload "$CLI_PLIST" 2>/dev/null || true
-    launchctl load "$CLI_PLIST"
-    echo "Claude CLI自動起動登録完了: 次回ログイン時からTerminalが自動で開きます"
-fi
+# 既存のログイン項目を削除してから再追加
+osascript -e 'tell application "System Events" to delete (every login item whose name is "ClaudeUsageCLI")' 2>/dev/null || true
+osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$APP_PATH\", hidden:false}"
+echo "Claude CLI自動起動登録完了: 次回ログイン時にTerminalが自動で開きます（初回のみAutomation権限の確認あり）"
