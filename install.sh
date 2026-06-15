@@ -26,7 +26,7 @@ script_path = sys.argv[2]
 with open(settings_path) as f:
     settings = json.load(f)
 
-settings["statusLine"] = {"type": "command", "command": script_path}
+settings["statusLine"] = {"type": "command", "command": script_path, "refreshInterval": 30}
 
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
