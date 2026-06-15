@@ -78,27 +78,37 @@ else
     echo "警告: python3 または menubar_app.py が見つからないためメニューバーアプリをスキップしました"
 fi
 
-# AppleScriptアプリをコンパイルしてログイン項目に登録
-CLAUDE_BIN="$HOME/.local/bin/claude"
-APP_PATH="$HOME/Applications/ClaudeUsageCLI.app"
+# LaunchAgent で .command ファイルを open コマンド経由で起動
+# （osascript/Automation権限不要。再起動後も権限リセットされない）
+COMMAND_FILE="$SCRIPT_DIR/start_claude.command"
+python3 -c "import os; os.chmod('$COMMAND_FILE', 0o755)"
+CLI_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.cli-terminal.plist"
 
-mkdir -p "$HOME/Applications"
-osacompile -o "$APP_PATH" - <<APPLESCRIPT
--- ログイン後のセッション復元を待つ
-delay 5
+cat > "$CLI_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.claude-usage.cli-terminal</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/open</string>
+        <string>-a</string>
+        <string>Terminal</string>
+        <string>$COMMAND_FILE</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>$HOME/.claude/cli_terminal.log</string>
+</dict>
+</plist>
+PLIST
 
-tell application "Terminal"
-    activate
-    -- 既存ウィンドウがあればそこで起動、なければ新規ウィンドウ
-    if (count of windows) > 0 then
-        do script "cd '$SCRIPT_DIR' && $CLAUDE_BIN" in front window
-    else
-        do script "cd '$SCRIPT_DIR' && $CLAUDE_BIN"
-    end if
-end tell
-APPLESCRIPT
-
-# 既存のログイン項目を削除してから再追加
+# 古いログイン項目（ClaudeUsageCLI.app）があれば削除
 osascript -e 'tell application "System Events" to delete (every login item whose name is "ClaudeUsageCLI")' 2>/dev/null || true
-osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$APP_PATH\", hidden:false}"
-echo "Claude CLI自動起動登録完了: 次回ログイン時にTerminalが自動で開きます（初回のみAutomation権限の確認あり）"
+
+launchctl bootout "gui/$(id -u)" "$CLI_PLIST" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$CLI_PLIST"
+echo "Claude CLI自動起動登録完了: 次回ログイン時にTerminalが自動で開きます"
