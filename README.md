@@ -27,7 +27,7 @@ Claude Code の5時間レート制限の使用量を **CLIステータスバー*
 
 ```bash
 # 1. リポジトリをクローン
-git clone https://github.com/YOUR_USERNAME/claude-usage-display.git
+git clone https://github.com/kenta2107sub-star/claude-usage-display.git
 cd claude-usage-display
 
 # 2. rumps をインストール
