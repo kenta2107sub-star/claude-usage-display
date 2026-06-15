@@ -72,3 +72,34 @@ PLIST
 else
     echo "警告: python3.14 または menubar_app.py が見つからないためメニューバーアプリをスキップしました"
 fi
+
+# LaunchAgent でログイン時にTerminal + Claude CLIを自動起動
+CLI_LAUNCHER="$SCRIPT_DIR/launch_claude_terminal.sh"
+CLI_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.cli-terminal.plist"
+
+if [ -f "$CLI_LAUNCHER" ]; then
+    mkdir -p "$LAUNCH_AGENTS_DIR"
+    cat > "$CLI_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.claude-usage.cli-terminal</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>$CLI_LAUNCHER</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>$HOME/.claude/cli_terminal.log</string>
+</dict>
+</plist>
+PLIST
+
+    launchctl unload "$CLI_PLIST" 2>/dev/null || true
+    launchctl load "$CLI_PLIST"
+    echo "Claude CLI自動起動登録完了: 次回ログイン時からTerminalが自動で開きます"
+fi
