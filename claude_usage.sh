@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Claude Codeステータスライン用：トークン使用量表示スクリプト
 
-input=$(cat)
+TMPFILE=$(mktemp)
+trap "rm -f '$TMPFILE'" EXIT
+cat > "$TMPFILE"
 
-python3 - "$input" <<'PYEOF'
-import json, sys, time
-from datetime import datetime, timezone
+python3 - "$TMPFILE" <<'PYEOF'
+import json, sys, time, os, pathlib
 
 try:
-    data = json.loads(sys.argv[1])
-except (json.JSONDecodeError, IndexError, ValueError):
+    with open(sys.argv[1]) as f:
+        data = json.load(f)
+except (json.JSONDecodeError, ValueError, OSError):
     sys.exit(0)
 
 five_hour = data.get("rate_limits", {}).get("five_hour", {})
@@ -38,8 +40,7 @@ if resets_at and now_ts < resets_at:
     else:
         parts.append(f"⏱ {m}m でリセット")
 
-# メニューバーアプリ用キャッシュを書き出す
-import os, pathlib
+# メニューバーアプリ用キャッシュをアトミックに書き出す
 cache_path = pathlib.Path.home() / ".claude" / "claude_usage_cache.json"
 cache = {
     "used_percentage": pct,
@@ -48,7 +49,9 @@ cache = {
     "updated_at": now_ts,
 }
 try:
-    cache_path.write_text(json.dumps(cache))
+    tmp = cache_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cache))
+    os.replace(tmp, cache_path)
 except Exception:
     pass
 

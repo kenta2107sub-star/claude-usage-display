@@ -28,9 +28,12 @@ with open(settings_path) as f:
 
 settings["statusLine"] = {"type": "command", "command": script_path, "refreshInterval": 30}
 
-with open(settings_path, "w") as f:
+import os, pathlib
+tmp = pathlib.Path(settings_path).with_suffix(".tmp")
+with open(tmp, "w") as f:
     json.dump(settings, f, indent=2, ensure_ascii=False)
     f.write("\n")
+os.replace(tmp, settings_path)
 
 print(f"登録完了: {settings_path} に statusLine = {script_path} を設定しました")
 PYEOF

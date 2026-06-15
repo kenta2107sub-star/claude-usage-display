@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.14
+#!/usr/bin/env python3
 """Claude Code usage menubar app for macOS.
 
 Data strategy:
@@ -106,7 +106,7 @@ class ClaudeUsageApp(rumps.App):
             updated_at = data.get("updated_at", 0)
             resets_at = data.get("resets_at") or 0
             now = time.time()
-            fresh = (now - updated_at <= CLI_CACHE_TTL) and (resets_at > now)
+            fresh = (now - updated_at <= CLI_CACHE_TTL) and (resets_at is None or resets_at > now)
         else:
             fresh = False
 

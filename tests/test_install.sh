@@ -19,7 +19,8 @@ result=$(python3 -c "
 import json
 with open('$TMP_CLAUDE_HOME/settings.json') as f:
     d = json.load(f)
-print(d.get('statusline', ''))
+v = d.get('statusLine', '')
+print(v.get('command', '') if isinstance(v, dict) else v)
 ")
 
 if echo "$result" | grep -q "claude_usage.sh"; then
