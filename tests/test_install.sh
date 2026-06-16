@@ -64,6 +64,15 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# テスト2b: スクリプトが ~/.claude/ にコピーされているか
+if [ -f "$TMP_DIR/.claude/rate_limit_poller.sh" ] && [ -f "$TMP_DIR/.claude/menubar_app.py" ]; then
+    echo "PASS: scripts copied to ~/.claude/"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL: scripts not copied to ~/.claude/"
+    FAIL=$((FAIL + 1))
+fi
+
 # テスト3: ポーラー用 plist が生成されているか
 POLLER_PLIST="$TMP_LAUNCH_AGENTS/com.claude-usage.rate-limit-poller.plist"
 if [ -f "$POLLER_PLIST" ]; then
