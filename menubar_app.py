@@ -46,22 +46,19 @@ def _age_str(updated_at):
     return f"{h}時間前"
 
 
-def build_title(data, fresh):
+def build_title(data):
     if data is None:
         return "📊 ?"
 
     pct = data.get("used_percentage", 0)
     resets_at = data.get("resets_at")
+    updated_at = data.get("updated_at") or None
+    rem = _remaining_str(resets_at)
+    age = _age_str(updated_at) if updated_at else "不明"
 
-    if fresh:
-        rem = _remaining_str(resets_at)
-        if rem:
-            return f"📊 {pct}% ⏱{rem}"
-        return f"📊 {pct}%"
-    else:
-        updated_at = data.get("updated_at") or None
-        age = _age_str(updated_at) if updated_at else "不明"
-        return f"📊 {pct}% ({age})"
+    if rem:
+        return f"📊 {pct}% ({age}) ⏱{rem}"
+    return f"📊 {pct}% ({age})"
 
 
 def build_detail(data, fresh):
@@ -72,6 +69,7 @@ def build_detail(data, fresh):
     pct = data.get("used_percentage", "?")
     resets_at = data.get("resets_at")
     updated_at = data.get("updated_at", 0)
+    resets_at_polled_at = data.get("resets_at_polled_at")
 
     lines = [f"使用量: {pct}%"]
 
@@ -81,12 +79,15 @@ def build_detail(data, fresh):
             h, m = secs // 3600, (secs % 3600) // 60
             lines.append(f"リセットまで: {h}h{m:02d}m")
         else:
-            lines.append("リセット済み（次回CLIで更新）")
+            lines.append("リセット済み")
 
     if fresh:
-        lines.append("データ: 正確 (CLI)")
+        lines.append("使用量: 正確 (CLI)")
     else:
-        lines.append(f"データ: {_age_str(updated_at)}の値 (CLI未使用)")
+        lines.append(f"使用量: {_age_str(updated_at)}の値 (CLI未使用)")
+
+    if resets_at_polled_at:
+        lines.append(f"リセット時刻: {_age_str(resets_at_polled_at)}更新")
 
     return " | ".join(lines)
 
@@ -111,7 +112,7 @@ class ClaudeUsageApp(rumps.App):
         else:
             fresh = False
 
-        self.title = build_title(data, fresh)
+        self.title = build_title(data)
         self.menu["詳細"].title = build_detail(data, fresh)
 
     @rumps.timer(REFRESH_INTERVAL)

@@ -46,29 +46,20 @@ PYTHON_BIN="$(which python3 2>/dev/null)"
 
 if [ -f "$MENUBAR_SCRIPT" ] && [ -n "$PYTHON_BIN" ]; then
     mkdir -p "$LAUNCH_AGENTS_DIR"
-    cat > "$PLIST_PATH" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.claude-usage.menubar</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>$PYTHON_BIN</string>
-        <string>$MENUBAR_SCRIPT</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>$HOME/.claude/menubar_app.log</string>
-    <key>StandardErrorPath</key>
-    <string>$HOME/.claude/menubar_app.log</string>
-</dict>
-</plist>
-PLIST
+    # C-3修正: パスに特殊文字が含まれてもXMLが壊れないようPythonでplistを生成する
+    python3 - "$PLIST_PATH" "$PYTHON_BIN" "$MENUBAR_SCRIPT" "$HOME" <<'PYEOF'
+import sys, plistlib, pathlib
+plist_path, python_bin, menubar_script, home = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+data = {
+    "Label": "com.claude-usage.menubar",
+    "ProgramArguments": [python_bin, menubar_script],
+    "RunAtLoad": True,
+    "KeepAlive": True,
+    "StandardOutPath": f"{home}/.claude/menubar_app.log",
+    "StandardErrorPath": f"{home}/.claude/menubar_app.log",
+}
+pathlib.Path(plist_path).write_bytes(plistlib.dumps(data))
+PYEOF
 
     # 既存のエージェントを停止してから登録（bootstrap/bootout が現行API）
     launchctl bootout "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null || true
@@ -81,30 +72,24 @@ fi
 # LaunchAgent で .command ファイルを open コマンド経由で起動
 # （osascript/Automation権限不要。再起動後も権限リセットされない）
 COMMAND_FILE="$SCRIPT_DIR/start_claude.command"
-python3 -c "import os; os.chmod('$COMMAND_FILE', 0o755)"
+python3 - "$COMMAND_FILE" <<'PYEOF'
+import sys, os
+os.chmod(sys.argv[1], 0o755)
+PYEOF
 CLI_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.cli-terminal.plist"
 
-cat > "$CLI_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.claude-usage.cli-terminal</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/open</string>
-        <string>-a</string>
-        <string>Terminal</string>
-        <string>$COMMAND_FILE</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StandardErrorPath</key>
-    <string>$HOME/.claude/cli_terminal.log</string>
-</dict>
-</plist>
-PLIST
+# C-3修正: PythonでplistをXMLエスケープ安全に生成する
+python3 - "$CLI_PLIST" "$COMMAND_FILE" "$HOME" <<'PYEOF'
+import sys, plistlib, pathlib
+plist_path, command_file, home = sys.argv[1], sys.argv[2], sys.argv[3]
+data = {
+    "Label": "com.claude-usage.cli-terminal",
+    "ProgramArguments": ["/usr/bin/open", "-a", "Terminal", command_file],
+    "RunAtLoad": True,
+    "StandardErrorPath": f"{home}/.claude/cli_terminal.log",
+}
+pathlib.Path(plist_path).write_bytes(plistlib.dumps(data))
+PYEOF
 
 # 古いログイン項目（ClaudeUsageCLI.app）があれば削除
 osascript -e 'tell application "System Events" to delete (every login item whose name is "ClaudeUsageCLI")' 2>/dev/null || true
@@ -112,3 +97,31 @@ osascript -e 'tell application "System Events" to delete (every login item whose
 launchctl bootout "gui/$(id -u)" "$CLI_PLIST" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$CLI_PLIST"
 echo "Claude CLI自動起動登録完了: 次回ログイン時にTerminalが自動で開きます"
+
+# LaunchAgent でrate_limit_poller.shを15分ごとにバックグラウンド実行（ターミナル不要）
+POLLER_SCRIPT="$SCRIPT_DIR/rate_limit_poller.sh"
+POLLER_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.rate-limit-poller.plist"
+python3 - "$POLLER_SCRIPT" <<'PYEOF'
+import sys, os
+os.chmod(sys.argv[1], 0o755)
+PYEOF
+
+# C-3修正: PythonでplistをXMLエスケープ安全に生成する
+# I-1修正: ThrottleInterval を追加してクラッシュ時の無限即時再起動を防ぐ
+python3 - "$POLLER_PLIST" "$POLLER_SCRIPT" "$HOME" <<'PYEOF'
+import sys, plistlib, pathlib
+plist_path, poller_script, home = sys.argv[1], sys.argv[2], sys.argv[3]
+data = {
+    "Label": "com.claude-usage.rate-limit-poller",
+    "ProgramArguments": ["/bin/bash", poller_script],
+    "StartInterval": 900,
+    "ThrottleInterval": 60,
+    "StandardOutPath": f"{home}/.claude/rate_limit_poller.log",
+    "StandardErrorPath": f"{home}/.claude/rate_limit_poller.log",
+}
+pathlib.Path(plist_path).write_bytes(plistlib.dumps(data))
+PYEOF
+
+launchctl bootout "gui/$(id -u)" "$POLLER_PLIST" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$POLLER_PLIST"
+echo "レート制限ポーリング登録完了: 15分ごとにバックグラウンドで更新します"

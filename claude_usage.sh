@@ -40,24 +40,34 @@ if resets_at and now_ts < resets_at:
     else:
         parts.append(f"⏱ {m}m でリセット")
 
-# メニューバーアプリ用キャッシュをアトミックに書き出す
+# メニューバーアプリ用キャッシュをアトミックに書き出す（既存フィールドをマージ）
 cache_path = pathlib.Path.home() / ".claude" / "claude_usage_cache.json"
-cache = {
+try:
+    existing = json.loads(cache_path.read_text())
+except Exception:
+    existing = {}
+
+existing.update({
     "used_percentage": pct,
     "resets_at": resets_at,
     "remaining_secs": remaining_secs,
     "updated_at": now_ts,
-}
+})
+tmp_name = None
 try:
     import tempfile
     with tempfile.NamedTemporaryFile(
         mode='w', dir=cache_path.parent, delete=False, suffix='.tmp'
     ) as tf:
-        tf.write(json.dumps(cache))
+        tf.write(json.dumps(existing))
         tmp_name = tf.name
     os.replace(tmp_name, cache_path)
 except Exception:
-    pass
+    if tmp_name and os.path.exists(tmp_name):
+        try:
+            os.unlink(tmp_name)
+        except Exception:
+            pass
 
 print(" ".join(parts))
 PYEOF
