@@ -8,6 +8,8 @@ CACHE_FILE="$HOME/.claude/claude_usage_cache.json"
 BUDDY_TOKENS="$HOME/Library/Application Support/Claude/buddy-tokens.json"
 IDLE_THRESHOLD=1800  # 30分（秒）
 CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
+# PYTHON3_BIN はinstall.shがコピー時に絶対パスに書き換える（LaunchAgentのPATH対策）
+PYTHON3_BIN="${PYTHON3_BIN:-python3}"
 
 # アクティビティ確認：CLI または Desktop が30分以内に動いていれば実行する
 check_activity() {
@@ -17,7 +19,7 @@ check_activity() {
     # CLI活動：claude_usage_cache.json の updated_at を確認（C-2修正: 引数渡し）
     if [ -f "$CACHE_FILE" ]; then
         local cli_updated
-        cli_updated=$(python3 - "$CACHE_FILE" <<'PYEOF' 2>/dev/null || echo 0
+        cli_updated=$("$PYTHON3_BIN" - "$CACHE_FILE" <<'PYEOF' 2>/dev/null || echo 0
 import json, sys
 try:
     d=json.load(open(sys.argv[1]))
@@ -51,7 +53,7 @@ fi
 
 # Python PTY でclaudeを起動しstatusLineを発火させる
 # C-1修正: ユーザー名ハードコードを $HOME/$CLAUDE_BIN で解決し引数として渡す
-PATH="$HOME/.local/bin:$PATH" python3 - "$CACHE_FILE" "$CLAUDE_BIN" <<'PYEOF'
+PATH="$HOME/.local/bin:$PATH" "$PYTHON3_BIN" - "$CACHE_FILE" "$CLAUDE_BIN" <<'PYEOF'
 import pty, os, select, time, subprocess, json, sys
 from pathlib import Path
 

@@ -20,42 +20,22 @@ if [ ! -f "$SETTINGS_FILE" ]; then
     printf '{}' > "$SETTINGS_FILE.tmp" && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
 fi
 
-# LaunchAgent から実行するスクリプトは ~/.claude/ にコピーして参照する
-# （Desktop等のユーザーフォルダはTCCによりLaunchAgentからアクセス制限される場合がある）
-POLLER_INSTALLED="$CLAUDE_DIR/rate_limit_poller.sh"
-MENUBAR_INSTALLED="$CLAUDE_DIR/menubar_app.py"
-cp "$SCRIPT_DIR/rate_limit_poller.sh" "$POLLER_INSTALLED"
-cp "$SCRIPT_DIR/menubar_app.py" "$MENUBAR_INSTALLED"
-chmod 755 "$POLLER_INSTALLED"
+# ── Python3 を探す ──────────────────────────────────────────────────────────
+# LaunchAgentのPATHは /usr/bin:/bin のみ。python3 を絶対パスで確定させる。
+# 1) plist生成・ポーラー用（pty のみ必要。macOS標準 python3 で可）
+PLIST_PYTHON=""
+for candidate in /usr/local/bin/python3 /opt/homebrew/bin/python3 /usr/bin/python3; do
+    if [ -x "$candidate" ] && "$candidate" -c "import pty" 2>/dev/null; then
+        PLIST_PYTHON="$candidate"
+        break
+    fi
+done
+if [ -z "$PLIST_PYTHON" ]; then
+    echo "エラー: python3 が見つかりません"
+    exit 1
+fi
 
-echo "スクリプトを $CLAUDE_DIR にコピーしました"
-
-# 既存のsettings.jsonにstatuslineキーをマージ
-python3 - "$SETTINGS_FILE" "$SCRIPT_PATH" <<'PYEOF'
-import json, sys
-
-settings_path = sys.argv[1]
-script_path = sys.argv[2]
-
-with open(settings_path) as f:
-    settings = json.load(f)
-
-settings["statusLine"] = {"type": "command", "command": script_path, "refreshInterval": 30}
-
-import os, pathlib
-tmp = pathlib.Path(settings_path).with_suffix(".tmp")
-with open(tmp, "w") as f:
-    json.dump(settings, f, indent=2, ensure_ascii=False)
-    f.write("\n")
-os.replace(tmp, settings_path)
-
-print(f"登録完了: {settings_path} に statusLine = {script_path} を設定しました")
-PYEOF
-
-# LaunchAgent でメニューバーアプリを自動起動登録
-PLIST_PATH="$LAUNCH_AGENTS_DIR/com.claude-usage.menubar.plist"
-
-# rumps がインストールされている python3 を探す（Homebrew優先）
+# 2) メニューバーアプリ用（rumps が必要）
 PYTHON_BIN=""
 _which_python=$(command -v python3 2>/dev/null || true)
 _python_candidates=(/usr/local/bin/python3 /opt/homebrew/bin/python3)
@@ -67,8 +47,44 @@ for candidate in "${_python_candidates[@]}"; do
     fi
 done
 
+# ── スクリプトを ~/.claude/ にコピー ─────────────────────────────────────────
+# TCC制限：LaunchAgentはDesktop等へのアクセスが制限されるため ~/.claude/ を使う
+POLLER_INSTALLED="$CLAUDE_DIR/rate_limit_poller.sh"
+MENUBAR_INSTALLED="$CLAUDE_DIR/menubar_app.py"
+cp "$SCRIPT_DIR/rate_limit_poller.sh" "$POLLER_INSTALLED"
+cp "$SCRIPT_DIR/menubar_app.py" "$MENUBAR_INSTALLED"
+chmod 755 "$POLLER_INSTALLED"
+
+# コピーしたポーラーの PYTHON3_BIN を絶対パスに書き換える
+# （LaunchAgent環境では PATH が短く python3 が見つからないため）
+sed -i '' "s|PYTHON3_BIN=\"\${PYTHON3_BIN:-python3}\"|PYTHON3_BIN=\"${PLIST_PYTHON}\"|" "$POLLER_INSTALLED"
+echo "スクリプトを $CLAUDE_DIR にコピーしました（python3: $PLIST_PYTHON）"
+
+# ── settings.json に statusLine を登録 ────────────────────────────────────
+"$PLIST_PYTHON" - "$SETTINGS_FILE" "$SCRIPT_PATH" <<'PYEOF'
+import json, sys, os, pathlib
+
+settings_path = sys.argv[1]
+script_path = sys.argv[2]
+
+with open(settings_path) as f:
+    settings = json.load(f)
+
+settings["statusLine"] = {"type": "command", "command": script_path, "refreshInterval": 30}
+
+tmp = pathlib.Path(settings_path).with_suffix(".tmp")
+with open(tmp, "w") as f:
+    json.dump(settings, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+os.replace(tmp, settings_path)
+
+print(f"登録完了: {settings_path} に statusLine = {script_path} を設定しました")
+PYEOF
+
+# ── メニューバーアプリ LaunchAgent ────────────────────────────────────────
+PLIST_PATH="$LAUNCH_AGENTS_DIR/com.claude-usage.menubar.plist"
 if [ -n "$PYTHON_BIN" ]; then
-    "$PYTHON_BIN" - "$PLIST_PATH" "$PYTHON_BIN" "$MENUBAR_INSTALLED" "$HOME" <<'PYEOF'
+    "$PLIST_PYTHON" - "$PLIST_PATH" "$PYTHON_BIN" "$MENUBAR_INSTALLED" "$HOME" <<'PYEOF'
 import sys, plistlib, pathlib
 plist_path, python_bin, menubar_script, home = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 data = {
@@ -81,7 +97,6 @@ data = {
 }
 pathlib.Path(plist_path).write_bytes(plistlib.dumps(data))
 PYEOF
-
     launchctl bootout "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null || true
     launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
     echo "メニューバーアプリ登録完了: ログイン時に自動起動します"
@@ -95,14 +110,7 @@ OLD_CLI_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.cli-terminal.plist"
 launchctl bootout "gui/$(id -u)" "$OLD_CLI_PLIST" 2>/dev/null || true
 rm -f "$OLD_CLI_PLIST"
 
-# plist 生成用 python3（rumps 不要、どれでも可）
-PLIST_PYTHON=$(command -v python3 2>/dev/null || true)
-if [ -z "$PLIST_PYTHON" ]; then
-    echo "エラー: python3 が見つかりません"
-    exit 1
-fi
-
-# ログイン時の初回ポール用 LaunchAgent（~/.claude/ から実行）
+# ── startup-poll LaunchAgent（ログイン時1回・FORCE_POLL=1）─────────────────
 STARTUP_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.startup-poll.plist"
 "$PLIST_PYTHON" - "$STARTUP_PLIST" "$POLLER_INSTALLED" "$HOME" <<'PYEOF'
 import sys, plistlib, pathlib
@@ -118,12 +126,11 @@ data = {
 }
 pathlib.Path(plist_path).write_bytes(plistlib.dumps(data))
 PYEOF
-
 launchctl bootout "gui/$(id -u)" "$STARTUP_PLIST" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$STARTUP_PLIST"
 echo "ログイン時初回ポール登録完了: バックグラウンドで自動更新します（Terminal不要）"
 
-# LaunchAgent でrate_limit_poller.shを15分ごとにバックグラウンド実行（~/.claude/ から実行）
+# ── rate-limit-poller LaunchAgent（15分ごと）─────────────────────────────
 POLLER_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.rate-limit-poller.plist"
 "$PLIST_PYTHON" - "$POLLER_PLIST" "$POLLER_INSTALLED" "$HOME" <<'PYEOF'
 import sys, plistlib, pathlib
@@ -138,7 +145,6 @@ data = {
 }
 pathlib.Path(plist_path).write_bytes(plistlib.dumps(data))
 PYEOF
-
 launchctl bootout "gui/$(id -u)" "$POLLER_PLIST" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$POLLER_PLIST"
 echo "レート制限ポーリング登録完了: 15分ごとにバックグラウンドで更新します"
