@@ -7,6 +7,11 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 PASS=0
 FAIL=0
 
+# テスト用の一時キャッシュファイル（本番キャッシュを汚染しない）
+TMP_CACHE=$(mktemp)
+export CLAUDE_USAGE_CACHE="$TMP_CACHE"
+trap "rm -f '$TMP_CACHE'" EXIT
+
 check() {
     local desc="$1" result="$2" expected="$3"
     if echo "$result" | grep -q "$expected"; then

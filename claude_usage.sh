@@ -41,7 +41,8 @@ if resets_at and now_ts < resets_at:
         parts.append(f"⏱ {m}m でリセット")
 
 # メニューバーアプリ用キャッシュをアトミックに書き出す（既存フィールドをマージ）
-cache_path = pathlib.Path.home() / ".claude" / "claude_usage_cache.json"
+import os
+cache_path = pathlib.Path(os.environ.get("CLAUDE_USAGE_CACHE", "")) or pathlib.Path.home() / ".claude" / "claude_usage_cache.json"
 try:
     existing = json.loads(cache_path.read_text())
 except Exception:
