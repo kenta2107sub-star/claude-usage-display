@@ -53,8 +53,9 @@ fi
 
 # Python PTY でclaudeを起動しstatusLineを発火させる
 # C-1修正: ユーザー名ハードコードを $HOME/$CLAUDE_BIN で解決し引数として渡す
-PATH="$HOME/.local/bin:$PATH" "$PYTHON3_BIN" - "$CACHE_FILE" "$CLAUDE_BIN" <<'PYEOF'
-import pty, os, select, time, subprocess, json, sys
+export PATH="$HOME/.local/bin:$PATH"
+"$PYTHON3_BIN" - "$CACHE_FILE" "$CLAUDE_BIN" <<'PYEOF'
+import pty, os, select, time, subprocess, json, sys, signal, struct
 from pathlib import Path
 
 cache_path = Path(sys.argv[1])
@@ -69,51 +70,119 @@ def get_updated_at():
 
 before_updated = get_updated_at()
 
+import datetime
+_pid = os.getpid()
+_dbg = open('/tmp/claude_pty_debug.log', 'a')
+def dbg(msg): _dbg.write(f"{datetime.datetime.now().isoformat()} [{_pid}] {msg}\n"); _dbg.flush()
+
+dbg(f"start claude_bin={claude_bin} cache={cache_path} env_PATH={os.environ.get('PATH','')}")
+
+import fcntl, termios
+
+# シグナルハンドラ（デバッグ用）
+def _sig_handler(signum, frame):
+    dbg(f"received signal {signum}")
+    sys.exit(128 + signum)
+signal.signal(signal.SIGTERM, _sig_handler)
+signal.signal(signal.SIGINT, _sig_handler)
+
 master, slave = pty.openpty()
+
+# PTYウィンドウサイズを80x24に設定（TUIアプリは0x0だとハングする）
+winsize = struct.pack('HHHH', 24, 80, 0, 0)  # rows, cols, xpixels, ypixels
+fcntl.ioctl(master, termios.TIOCSWINSZ, winsize)
+dbg("set window size to 80x24")
+
+def _setup_slave_tty():
+    os.setsid()
+    fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+
 proc = subprocess.Popen(
-    [claude_bin],
+    [claude_bin, '--dangerously-skip-permissions'],
     stdin=slave, stdout=slave, stderr=slave,
     close_fds=True,
+    preexec_fn=_setup_slave_tty,
+    cwd=home,
     env={**os.environ, 'PATH': f'{home}/.local/bin:/usr/local/bin:/usr/bin:/bin'}
 )
 os.close(slave)
+dbg(f"claude pid={proc.pid}")
 
-# I-3修正: finally で必ず master を閉じる
+def respond_to_queries(master_fd, data):
+    """端末クエリに応答する（claudeが応答を待って停止するのを防ぐ）"""
+    try:
+        if b'\x1b[c' in data:
+            os.write(master_fd, b'\x1b[?62;1;22c')
+        if b'\x1b[>0c' in data or b'\x1b[>c' in data:
+            os.write(master_fd, b'\x1b[>1;95;0c')
+        if b'\x1b[>0q' in data or b'\x1b[>q' in data:
+            os.write(master_fd, b'\x1bP>|xterm(370)\x1b\\')
+        if b'\x1b[?u' in data:
+            os.write(master_fd, b'\x1b[?0u')
+        if b'\x1b[?1004h' in data:
+            os.write(master_fd, b'\x1b[I')
+    except OSError:
+        pass
+
 try:
-    # プロンプト（❯）が出るまで待つ（最大15秒）
+    # プロンプト（❯）が出るまで待つ（最大30秒）
     output = b""
     start = time.time()
-    while time.time() - start < 15:
+    while time.time() - start < 30:
         r, _, _ = select.select([master], [], [], 0.5)
         if r:
             try:
-                output += os.read(master, 4096)
+                chunk = os.read(master, 4096)
+                output += chunk
+                respond_to_queries(master, chunk)
+                dbg(f"read {len(chunk)}b prompt_found={'❯' in output.decode('utf-8','replace')}")
             except OSError:
+                dbg("OSError reading master (slave closed)")
                 break
         if b'\xe2\x9d\xaf' in output:  # ❯
             break
 
-    # メッセージ送信
-    time.sleep(1)
+    proc_state = proc.poll()
+    dbg(f"sending message, proc_state={proc_state} output_so_far={repr(output[:200])}")
+    time.sleep(0.5)
     try:
-        os.write(master, b'.\n')
+        # CR (\r) がraw modeのTUIでのEnterキー。LF (\n) ではサブミットされない。
+        os.write(master, b'.\r')
+        dbg("sent .CR to master")
     except OSError:
+        dbg("OSError writing to master")
         sys.exit(1)
 
-    # statusLine発火（updated_at更新）を最大90秒待つ
+    # statusLine発火（updated_at更新）を最大120秒待つ
     start = time.time()
-    while time.time() - start < 90:
-        if get_updated_at() != before_updated:
+    loop_iter = 0
+    while time.time() - start < 120:
+        loop_iter += 1
+        elapsed = time.time() - start
+        current = get_updated_at()
+        if current != before_updated:
+            dbg(f"cache updated! iter={loop_iter} elapsed={elapsed:.1f}s {before_updated} -> {current}")
             break
         r, _, _ = select.select([master], [], [], 1)
         if r:
             try:
-                os.read(master, 4096)
+                chunk = os.read(master, 4096)
+                dbg(f"wait loop iter={loop_iter} elapsed={elapsed:.1f}s read {len(chunk)}b: {repr(chunk[:200])}")
+                respond_to_queries(master, chunk)
             except OSError:
+                dbg(f"wait loop OSError iter={loop_iter} elapsed={elapsed:.1f}s proc={proc.poll()}")
                 break
+        else:
+            # データなし時は10イテレーションごとにログ
+            if loop_iter % 10 == 0:
+                dbg(f"wait loop no data iter={loop_iter} elapsed={elapsed:.1f}s proc={proc.poll()}")
         time.sleep(0.5)
 
+    elapsed_final = time.time() - start
+    dbg(f"wait loop done after {elapsed_final:.1f}s iter={loop_iter}, cache_updated={get_updated_at() != before_updated}")
+
 finally:
+    dbg("finally block")
     try:
         proc.kill()
     except OSError:

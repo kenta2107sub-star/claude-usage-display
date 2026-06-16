@@ -51,9 +51,11 @@ done
 # TCC制限：LaunchAgentはDesktop等へのアクセスが制限されるため ~/.claude/ を使う
 POLLER_INSTALLED="$CLAUDE_DIR/rate_limit_poller.sh"
 MENUBAR_INSTALLED="$CLAUDE_DIR/menubar_app.py"
+USAGE_INSTALLED="$CLAUDE_DIR/claude_usage.sh"
 cp "$SCRIPT_DIR/rate_limit_poller.sh" "$POLLER_INSTALLED"
 cp "$SCRIPT_DIR/menubar_app.py" "$MENUBAR_INSTALLED"
-chmod 755 "$POLLER_INSTALLED"
+cp "$SCRIPT_DIR/claude_usage.sh" "$USAGE_INSTALLED"
+chmod 755 "$POLLER_INSTALLED" "$USAGE_INSTALLED"
 
 # コピーしたポーラーの PYTHON3_BIN を絶対パスに書き換える
 # （LaunchAgent環境では PATH が短く python3 が見つからないため）
@@ -61,7 +63,8 @@ sed -i '' "s|PYTHON3_BIN=\"\${PYTHON3_BIN:-python3}\"|PYTHON3_BIN=\"${PLIST_PYTH
 echo "スクリプトを $CLAUDE_DIR にコピーしました（python3: $PLIST_PYTHON）"
 
 # ── settings.json に statusLine を登録 ────────────────────────────────────
-"$PLIST_PYTHON" - "$SETTINGS_FILE" "$SCRIPT_PATH" <<'PYEOF'
+# statusLine command は ~/.claude/ のコピーを参照（TCC制限でDesktopが不可のため）
+"$PLIST_PYTHON" - "$SETTINGS_FILE" "$USAGE_INSTALLED" <<'PYEOF'
 import json, sys, os, pathlib
 
 settings_path = sys.argv[1]
