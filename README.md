@@ -11,15 +11,15 @@ Claude Code の5時間レート制限の使用量を **CLIステータスバー*
 - **CLIステータスバー** — `claude` コマンド使用中、入力欄の下に使用率とリセット時刻をリアルタイム表示
 - **macOSメニューバーアプリ** — Claude for Desktop 使用中もメニューバーに常時表示。更新時刻を常に併記
 - **バックグラウンドポーリング** — 15分ごとに自動更新。CLIを起動しなくてもメニューバーが最新値を保つ
-- **ログイン時自動起動** — PC起動時にTerminalで `claude` CLIを自動起動
+- **ログイン時自動起動** — PC起動時にバックグラウンドで即時ポーリング（Terminal不要）
 
 ---
 
 ## 必要環境
 
 - macOS
-- Claude Code CLI（`~/.local/bin/claude`）
-- Python 3.x（macOS標準）
+- Claude Code CLI（`~/.local/bin/claude`、または `CLAUDE_BIN` 環境変数で指定）
+- Python 3.x（Homebrew版推奨: `/usr/local/bin/python3` または `/opt/homebrew/bin/python3`）
 - [rumps](https://github.com/jaredks/rumps)（メニューバーアプリ用）
 
 ---
@@ -41,9 +41,9 @@ bash install.sh
 `install.sh` が以下をすべて自動で設定します：
 
 - CLIステータスバーの登録（`~/.claude/settings.json`）
+- スクリプトを `~/.claude/` にコピー（LaunchAgentのTCCアクセス制限対策）
 - メニューバーアプリのログイン時自動起動（LaunchAgent）
-- ログイン時にTerminalで `claude` を自動起動（LaunchAgent）
-- 15分ごとのバックグラウンドポーリング（LaunchAgent）
+- ログイン時の初回ポーリング・15分ごとのバックグラウンドポーリング（LaunchAgent）
 
 ---
 
@@ -72,13 +72,16 @@ bash install.sh
 
 ```
 claude-usage-display/
-├── claude_usage.sh          # CLIステータスバー用スクリプト
-├── menubar_app.py           # macOSメニューバーアプリ
-├── rate_limit_poller.sh     # 15分ごとバックグラウンドポーリング
-├── start_claude.command     # ログイン時Terminal起動スクリプト
+├── claude_usage.sh          # CLIステータスバー用スクリプト（settings.jsonから直接参照）
+├── menubar_app.py           # macOSメニューバーアプリ（~/.claude/ にコピーして実行）
+├── rate_limit_poller.sh     # バックグラウンドポーリング（~/.claude/ にコピーして実行）
 ├── install.sh               # セットアップスクリプト
 └── tests/                   # テスト
 ```
+
+インストール後は `~/.claude/` にも以下がコピーされます：
+- `~/.claude/menubar_app.py` — メニューバーアプリ本体（LaunchAgent参照先）
+- `~/.claude/rate_limit_poller.sh` — ポーラー本体（LaunchAgent参照先）
 
 ---
 
