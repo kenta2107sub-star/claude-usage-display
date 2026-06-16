@@ -69,34 +69,35 @@ else
     echo "警告: python3 または menubar_app.py が見つからないためメニューバーアプリをスキップしました"
 fi
 
-# LaunchAgent で .command ファイルを open コマンド経由で起動
-# （osascript/Automation権限不要。再起動後も権限リセットされない）
-COMMAND_FILE="$SCRIPT_DIR/start_claude.command"
-python3 - "$COMMAND_FILE" <<'PYEOF'
-import sys, os
-os.chmod(sys.argv[1], 0o755)
-PYEOF
-CLI_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.cli-terminal.plist"
-
-# C-3修正: PythonでplistをXMLエスケープ安全に生成する
-python3 - "$CLI_PLIST" "$COMMAND_FILE" "$HOME" <<'PYEOF'
-import sys, plistlib, pathlib
-plist_path, command_file, home = sys.argv[1], sys.argv[2], sys.argv[3]
-data = {
-    "Label": "com.claude-usage.cli-terminal",
-    "ProgramArguments": ["/usr/bin/open", "-a", "Terminal", command_file],
-    "RunAtLoad": True,
-    "StandardErrorPath": f"{home}/.claude/cli_terminal.log",
-}
-pathlib.Path(plist_path).write_bytes(plistlib.dumps(data))
-PYEOF
+# ログイン時の初回ポール用 LaunchAgent（Terminal不要・バックグラウンド直接実行）
+STARTUP_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.startup-poll.plist"
+POLLER_SCRIPT_ABS="$SCRIPT_DIR/rate_limit_poller.sh"
 
 # 古いログイン項目（ClaudeUsageCLI.app）があれば削除
 osascript -e 'tell application "System Events" to delete (every login item whose name is "ClaudeUsageCLI")' 2>/dev/null || true
 
-launchctl bootout "gui/$(id -u)" "$CLI_PLIST" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$CLI_PLIST"
-echo "Claude CLI自動起動登録完了: 次回ログイン時にTerminalが自動で開きます"
+# 古い cli-terminal LaunchAgent があれば停止・削除
+OLD_CLI_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.cli-terminal.plist"
+launchctl bootout "gui/$(id -u)" "$OLD_CLI_PLIST" 2>/dev/null || true
+rm -f "$OLD_CLI_PLIST"
+
+python3 - "$STARTUP_PLIST" "$POLLER_SCRIPT_ABS" "$HOME" <<'PYEOF'
+import sys, plistlib, pathlib
+plist_path, poller_script, home = sys.argv[1], sys.argv[2], sys.argv[3]
+data = {
+    "Label": "com.claude-usage.startup-poll",
+    "ProgramArguments": ["/bin/bash", poller_script],
+    "EnvironmentVariables": {"FORCE_POLL": "1"},
+    "RunAtLoad": True,
+    "StandardOutPath": f"{home}/.claude/startup_poll.log",
+    "StandardErrorPath": f"{home}/.claude/startup_poll.log",
+}
+pathlib.Path(plist_path).write_bytes(plistlib.dumps(data))
+PYEOF
+
+launchctl bootout "gui/$(id -u)" "$STARTUP_PLIST" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$STARTUP_PLIST"
+echo "ログイン時初回ポール登録完了: バックグラウンドで自動更新します（Terminal不要）"
 
 # LaunchAgent でrate_limit_poller.shを15分ごとにバックグラウンド実行（ターミナル不要）
 POLLER_SCRIPT="$SCRIPT_DIR/rate_limit_poller.sh"

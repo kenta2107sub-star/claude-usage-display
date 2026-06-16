@@ -74,13 +74,13 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# テスト4: CLI terminal 用 plist が生成されているか
-CLI_PLIST="$TMP_LAUNCH_AGENTS/com.claude-usage.cli-terminal.plist"
-if [ -f "$CLI_PLIST" ]; then
-    echo "PASS: cli-terminal plist generated"
+# テスト4: startup-poll 用 plist が生成されているか
+STARTUP_PLIST="$TMP_LAUNCH_AGENTS/com.claude-usage.startup-poll.plist"
+if [ -f "$STARTUP_PLIST" ]; then
+    echo "PASS: startup-poll plist generated"
     PASS=$((PASS + 1))
 else
-    echo "FAIL: cli-terminal plist not found at $CLI_PLIST"
+    echo "FAIL: startup-poll plist not found at $STARTUP_PLIST"
     FAIL=$((FAIL + 1))
 fi
 
