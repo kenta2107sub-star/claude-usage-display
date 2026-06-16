@@ -54,7 +54,15 @@ PYEOF
 
 # LaunchAgent でメニューバーアプリを自動起動登録
 PLIST_PATH="$LAUNCH_AGENTS_DIR/com.claude-usage.menubar.plist"
-PYTHON_BIN="$(which python3 2>/dev/null)"
+
+# rumps がインストールされている python3 を探す（Homebrew優先）
+PYTHON_BIN=""
+for candidate in /usr/local/bin/python3 /opt/homebrew/bin/python3 "$(which python3 2>/dev/null)"; do
+    if [ -x "$candidate" ] && "$candidate" -c "import rumps" 2>/dev/null; then
+        PYTHON_BIN="$candidate"
+        break
+    fi
+done
 
 if [ -n "$PYTHON_BIN" ]; then
     python3 - "$PLIST_PATH" "$PYTHON_BIN" "$MENUBAR_INSTALLED" "$HOME" <<'PYEOF'
