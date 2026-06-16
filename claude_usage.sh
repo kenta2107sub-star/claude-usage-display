@@ -2,7 +2,7 @@
 # Claude Codeステータスライン用：トークン使用量表示スクリプト
 
 TMPFILE=$(mktemp)
-trap "rm -f '$TMPFILE'" EXIT
+trap 'rm -f "$TMPFILE"' EXIT
 cat > "$TMPFILE"
 
 python3 - "$TMPFILE" <<'PYEOF'

@@ -15,8 +15,8 @@ fi
 TMP_DIR=$(mktemp -d)
 TMP_CLAUDE_HOME="$TMP_DIR/.claude"
 TMP_LAUNCH_AGENTS="$TMP_DIR/Library/LaunchAgents"
-mkdir -p "$TMP_CLAUDE_HOME"
-mkdir -p "$TMP_LAUNCH_AGENTS"
+TMP_BIN="$TMP_DIR/bin"
+mkdir -p "$TMP_CLAUDE_HOME" "$TMP_LAUNCH_AGENTS" "$TMP_BIN"
 echo "{}" > "$TMP_CLAUDE_HOME/settings.json"
 
 cleanup() { rm -rf "$TMP_DIR"; }
@@ -25,14 +25,14 @@ trap cleanup EXIT
 PASS=0
 FAIL=0
 
+# launchctl/osascript をファイルモックとして配置（macOS bash では export -f が不安定なため）
+for cmd in launchctl osascript; do
+    printf '#!/bin/bash\nexit 0\n' > "$TMP_BIN/$cmd"
+    chmod +x "$TMP_BIN/$cmd"
+done
+
 run_install() {
-    HOME="$TMP_DIR" bash -c '
-        osacompile() { return 0; }
-        osascript() { return 0; }
-        launchctl() { return 0; }
-        export -f osacompile osascript launchctl
-        bash '"$INSTALL_SCRIPT"'
-    ' 2>/dev/null
+    HOME="$TMP_DIR" PATH="$TMP_BIN:$PATH" bash "$INSTALL_SCRIPT" 2>/dev/null
 }
 
 run_install
@@ -46,7 +46,7 @@ v = d.get('statusLine', '')
 print(v.get('command', '') if isinstance(v, dict) else v)
 ")
 
-if echo "$result" | grep -q "claude_usage.sh"; then
+if echo "$result" | grep -qF "claude_usage.sh"; then
     echo "PASS: statusLine registered = $result"
     PASS=$((PASS + 1))
 else
@@ -54,17 +54,21 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# テスト2: メニューバー用 plist が生成されているか
+# テスト2: メニューバー用 plist が生成されているか（rumps がある場合のみ）
 MENUBAR_PLIST="$TMP_LAUNCH_AGENTS/com.claude-usage.menubar.plist"
-if [ -f "$MENUBAR_PLIST" ]; then
-    echo "PASS: menubar plist generated"
-    PASS=$((PASS + 1))
+if python3 -c "import rumps" 2>/dev/null; then
+    if [ -f "$MENUBAR_PLIST" ]; then
+        echo "PASS: menubar plist generated"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL: menubar plist not found at $MENUBAR_PLIST"
+        FAIL=$((FAIL + 1))
+    fi
 else
-    echo "FAIL: menubar plist not found at $MENUBAR_PLIST"
-    FAIL=$((FAIL + 1))
+    echo "SKIP: menubar plist (rumps not installed)"
 fi
 
-# テスト2b: スクリプトが ~/.claude/ にコピーされているか
+# テスト3: スクリプトが ~/.claude/ にコピーされているか
 if [ -f "$TMP_DIR/.claude/rate_limit_poller.sh" ] && [ -f "$TMP_DIR/.claude/menubar_app.py" ]; then
     echo "PASS: scripts copied to ~/.claude/"
     PASS=$((PASS + 1))
@@ -73,7 +77,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# テスト3: ポーラー用 plist が生成されているか
+# テスト4: ポーラー用 plist が生成されているか
 POLLER_PLIST="$TMP_LAUNCH_AGENTS/com.claude-usage.rate-limit-poller.plist"
 if [ -f "$POLLER_PLIST" ]; then
     echo "PASS: poller plist generated"
@@ -83,7 +87,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-# テスト4: startup-poll 用 plist が生成されているか
+# テスト5: startup-poll 用 plist が生成されているか
 STARTUP_PLIST="$TMP_LAUNCH_AGENTS/com.claude-usage.startup-poll.plist"
 if [ -f "$STARTUP_PLIST" ]; then
     echo "PASS: startup-poll plist generated"

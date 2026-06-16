@@ -36,6 +36,8 @@ def _remaining_str(resets_at):
 
 
 def _age_str(updated_at):
+    if not updated_at:
+        return "不明"
     secs = int(time.time() - updated_at)
     if secs < 60:
         return f"{secs}秒前"

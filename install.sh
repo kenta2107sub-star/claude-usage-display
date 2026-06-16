@@ -57,7 +57,10 @@ PLIST_PATH="$LAUNCH_AGENTS_DIR/com.claude-usage.menubar.plist"
 
 # rumps がインストールされている python3 を探す（Homebrew優先）
 PYTHON_BIN=""
-for candidate in /usr/local/bin/python3 /opt/homebrew/bin/python3 "$(which python3 2>/dev/null)"; do
+_which_python=$(command -v python3 2>/dev/null || true)
+_python_candidates=(/usr/local/bin/python3 /opt/homebrew/bin/python3)
+[ -n "$_which_python" ] && _python_candidates+=("$_which_python")
+for candidate in "${_python_candidates[@]}"; do
     if [ -x "$candidate" ] && "$candidate" -c "import rumps" 2>/dev/null; then
         PYTHON_BIN="$candidate"
         break
@@ -65,7 +68,7 @@ for candidate in /usr/local/bin/python3 /opt/homebrew/bin/python3 "$(which pytho
 done
 
 if [ -n "$PYTHON_BIN" ]; then
-    python3 - "$PLIST_PATH" "$PYTHON_BIN" "$MENUBAR_INSTALLED" "$HOME" <<'PYEOF'
+    "$PYTHON_BIN" - "$PLIST_PATH" "$PYTHON_BIN" "$MENUBAR_INSTALLED" "$HOME" <<'PYEOF'
 import sys, plistlib, pathlib
 plist_path, python_bin, menubar_script, home = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 data = {
@@ -83,7 +86,7 @@ PYEOF
     launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
     echo "メニューバーアプリ登録完了: ログイン時に自動起動します"
 else
-    echo "警告: python3 が見つからないためメニューバーアプリをスキップしました"
+    echo "警告: rumps がインストールされた python3 が見つからないためメニューバーアプリをスキップしました"
 fi
 
 # 古いログイン項目・LaunchAgent があれば削除
@@ -92,9 +95,16 @@ OLD_CLI_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.cli-terminal.plist"
 launchctl bootout "gui/$(id -u)" "$OLD_CLI_PLIST" 2>/dev/null || true
 rm -f "$OLD_CLI_PLIST"
 
+# plist 生成用 python3（rumps 不要、どれでも可）
+PLIST_PYTHON=$(command -v python3 2>/dev/null || true)
+if [ -z "$PLIST_PYTHON" ]; then
+    echo "エラー: python3 が見つかりません"
+    exit 1
+fi
+
 # ログイン時の初回ポール用 LaunchAgent（~/.claude/ から実行）
 STARTUP_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.startup-poll.plist"
-python3 - "$STARTUP_PLIST" "$POLLER_INSTALLED" "$HOME" <<'PYEOF'
+"$PLIST_PYTHON" - "$STARTUP_PLIST" "$POLLER_INSTALLED" "$HOME" <<'PYEOF'
 import sys, plistlib, pathlib
 plist_path, poller_script, home = sys.argv[1], sys.argv[2], sys.argv[3]
 data = {
@@ -115,7 +125,7 @@ echo "ログイン時初回ポール登録完了: バックグラウンドで自
 
 # LaunchAgent でrate_limit_poller.shを15分ごとにバックグラウンド実行（~/.claude/ から実行）
 POLLER_PLIST="$LAUNCH_AGENTS_DIR/com.claude-usage.rate-limit-poller.plist"
-python3 - "$POLLER_PLIST" "$POLLER_INSTALLED" "$HOME" <<'PYEOF'
+"$PLIST_PYTHON" - "$POLLER_PLIST" "$POLLER_INSTALLED" "$HOME" <<'PYEOF'
 import sys, plistlib, pathlib
 plist_path, poller_script, home = sys.argv[1], sys.argv[2], sys.argv[3]
 data = {

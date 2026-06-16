@@ -14,7 +14,7 @@ trap "rm -f '$TMP_CACHE'" EXIT
 
 check() {
     local desc="$1" result="$2" expected="$3"
-    if echo "$result" | grep -q "$expected"; then
+    if echo "$result" | grep -qF "$expected"; then
         echo "PASS: $desc = $result"
         PASS=$((PASS + 1))
     else

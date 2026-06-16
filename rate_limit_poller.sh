@@ -26,7 +26,8 @@ except Exception:
     print(0)
 PYEOF
 )
-        if [ $(( now - cli_updated )) -le $IDLE_THRESHOLD ]; then
+        local diff=$(( now - cli_updated ))
+        if [ "$diff" -ge 0 ] && [ "$diff" -le "$IDLE_THRESHOLD" ]; then
             return 0
         fi
     fi
@@ -35,7 +36,8 @@ PYEOF
     if [ -f "$BUDDY_TOKENS" ]; then
         local desktop_modified
         desktop_modified=$(stat -f %m "$BUDDY_TOKENS" 2>/dev/null || echo 0)
-        if [ $(( now - desktop_modified )) -le $IDLE_THRESHOLD ]; then
+        local desktop_diff=$(( now - desktop_modified ))
+        if [ "$desktop_diff" -ge 0 ] && [ "$desktop_diff" -le "$IDLE_THRESHOLD" ]; then
             return 0
         fi
     fi
