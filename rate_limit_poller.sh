@@ -46,6 +46,7 @@ PYEOF
 }
 
 if [ "${FORCE_POLL:-0}" != "1" ] && ! check_activity; then
+    echo "$(date '+%H:%M:%S') skipped: idle"
     exit 0
 fi
 
@@ -161,4 +162,17 @@ finally:
         os.close(master)
     except OSError:
         pass
+
+import datetime
+ts = datetime.datetime.now().strftime('%H:%M:%S')
+try:
+    d = json.loads(cache_path.read_text())
+    pct = d.get('used_percentage', '?')
+    updated = d.get('updated_at', 0)
+    if updated != before_updated:
+        print(f"{ts} updated: {pct}%")
+    else:
+        print(f"{ts} failed: cache not updated")
+except Exception:
+    print(f"{ts} failed: could not read cache")
 PYEOF

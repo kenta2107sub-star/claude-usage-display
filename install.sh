@@ -142,6 +142,7 @@ data = {
     "Label": "com.claude-usage.rate-limit-poller",
     "ProgramArguments": ["/bin/bash", poller_script],
     "StartInterval": 900,
+    "WatchPaths": [f"{home}/Library/Application Support/Claude/buddy-tokens.json"],
     "ThrottleInterval": 60,
     "StandardOutPath": f"{home}/.claude/rate_limit_poller.log",
     "StandardErrorPath": f"{home}/.claude/rate_limit_poller.log",
