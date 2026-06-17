@@ -125,10 +125,10 @@ def respond_to_queries(master_fd, data):
         pass
 
 try:
-    # プロンプト（❯）が出るまで待つ（最大30秒）
+    # プロンプト（❯）が出るまで待つ（最大120秒：LaunchAgentコールドスタート対応）
     output = b""
     start = time.time()
-    while time.time() - start < 30:
+    while time.time() - start < 120:
         r, _, _ = select.select([master], [], [], 0.5)
         if r:
             try:
@@ -143,7 +143,13 @@ try:
             break
 
     proc_state = proc.poll()
-    dbg(f"sending message, proc_state={proc_state} output_so_far={repr(output[:200])}")
+    prompt_found = b'\xe2\x9d\xaf' in output
+    dbg(f"prompt_found={prompt_found} proc_state={proc_state} elapsed={time.time()-start:.1f}s output_so_far={repr(output[:200])}")
+
+    if not prompt_found:
+        dbg("prompt not found, aborting without sending input")
+        sys.exit(0)
+
     time.sleep(0.5)
     try:
         # CR (\r) がraw modeのTUIでのEnterキー。LF (\n) ではサブミットされない。
