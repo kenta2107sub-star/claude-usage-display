@@ -52,13 +52,17 @@ fi
 
 export PATH="$HOME/.local/bin:$PATH"
 "$PYTHON3_BIN" - "$CACHE_FILE" "$CLAUDE_BIN" <<'PYEOF'
-import pty, os, select, time, subprocess, json, sys, struct
+import pty, os, select, time, subprocess, json, sys, struct, signal
 from pathlib import Path
 import fcntl, termios
 
 cache_path = Path(sys.argv[1])
 claude_bin = sys.argv[2]
 home = str(Path.home())
+
+# スクリプト全体の最大実行時間（270秒）。proc.wait() 等が無限ブロックした場合の安全弁。
+signal.signal(signal.SIGALRM, lambda s, f: sys.exit(1))
+signal.alarm(270)
 
 def get_updated_at():
     try:
@@ -149,15 +153,15 @@ try:
         time.sleep(0.5)
 
 finally:
+    # プロセスグループごと kill してゾンビ化した孫プロセスも含めて終了させる
     try:
-        proc.kill()
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
     except OSError:
         pass
     try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
+        proc.wait(timeout=5)
+    except (subprocess.TimeoutExpired, ChildProcessError):
+        pass
     try:
         os.close(master)
     except OSError:
