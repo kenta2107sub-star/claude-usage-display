@@ -42,6 +42,11 @@ PYEOF
         fi
     fi
 
+    # Claude Desktop アプリが起動中なら活動あり（buddy-tokens 更新前でもポールする）
+    if /usr/bin/pgrep -x "Claude" >/dev/null 2>&1; then
+        return 0
+    fi
+
     return 1  # アイドル
 }
 
