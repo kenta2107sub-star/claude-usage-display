@@ -71,7 +71,6 @@ def build_detail(data, fresh):
     pct = data.get("used_percentage", "?")
     resets_at = data.get("resets_at")
     updated_at = data.get("updated_at", 0)
-    resets_at_polled_at = data.get("resets_at_polled_at")
 
     lines = [f"使用量: {pct}%"]
 
@@ -87,9 +86,6 @@ def build_detail(data, fresh):
         lines.append("使用量: 正確 (CLI)")
     else:
         lines.append(f"使用量: {_age_str(updated_at)}の値 (CLI未使用)")
-
-    if resets_at_polled_at:
-        lines.append(f"リセット時刻: {_age_str(resets_at_polled_at)}更新")
 
     return " | ".join(lines)
 

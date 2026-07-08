@@ -2,7 +2,7 @@
 
 Claude Code の5時間レート制限の使用量を **CLIステータスバー** と **macOSメニューバー** に表示するツールです。
 
-![CLI statusLine example](https://img.shields.io/badge/📊%2028%25%20⏱4h30m-green)
+![menubar mockup](assets/menubar_mockup.svg)
 
 ---
 

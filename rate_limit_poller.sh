@@ -10,6 +10,18 @@ IDLE_THRESHOLD=1800  # 30分（秒）
 CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
 # PYTHON3_BIN は install.sh がコピー時に絶対パスに書き換える（LaunchAgent の PATH 対策）
 PYTHON3_BIN="${PYTHON3_BIN:-python3}"
+LOG_MAX_BYTES=1048576  # 1MB。超過分は古い方から切り捨てる
+
+# LaunchAgentが起動するたびに新しいプロセスとしてログファイルをopenするため、
+# 前回実行終了時点で切り詰めておけば次回の追記と競合しない。
+rotate_log() {
+    local log_file="$1"
+    if [ -f "$log_file" ] && [ "$(stat -f %z "$log_file" 2>/dev/null || echo 0)" -gt "$LOG_MAX_BYTES" ]; then
+        tail -c 200000 "$log_file" > "$log_file.tmp" 2>/dev/null && mv "$log_file.tmp" "$log_file"
+    fi
+}
+rotate_log "$HOME/.claude/rate_limit_poller.log"
+rotate_log "$HOME/.claude/startup_poll.log"
 
 # アクティビティ確認：CLI または Desktop が 30 分以内に動いていれば実行する
 check_activity() {
