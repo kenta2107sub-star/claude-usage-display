@@ -87,6 +87,22 @@ def get_updated_at():
     except Exception:
         return 0
 
+def write_auth_error(detected):
+    """ログイン切れ検知結果をキャッシュにマージして書き込む（メニューバー表示用）。"""
+    try:
+        existing = json.loads(cache_path.read_text())
+    except Exception:
+        existing = {}
+    existing['auth_error'] = detected
+    if detected:
+        existing['auth_error_at'] = time.time()
+    tmp_path = cache_path.with_suffix(cache_path.suffix + '.tmp')
+    try:
+        tmp_path.write_text(json.dumps(existing))
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        pass
+
 before_updated = get_updated_at()
 
 master, slave = pty.openpty()
@@ -98,12 +114,18 @@ def _setup_slave_tty():
     os.setsid()
     fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
 
+# cwd は $HOME ではなく ~/.claude を使う。$HOME は「このフォルダを信頼しますか？」の
+# 確認ダイアログが未承認だと毎回表示され、そのダイアログの選択カーソル（❯）を
+# 本物のチャットプロンプトと誤検知してポーリングが失敗し続けるため。
+# ~/.claude は install.sh が使う作業ディレクトリとしてすでに信頼済み。
+cwd_dir = os.path.join(home, '.claude')
+
 proc = subprocess.Popen(
     [claude_bin],
     stdin=slave, stdout=slave, stderr=slave,
     close_fds=True,
     preexec_fn=_setup_slave_tty,
-    cwd=home,
+    cwd=cwd_dir,
     env={**os.environ, 'PATH': f'{home}/.local/bin:/usr/local/bin:/usr/bin:/bin'}
 )
 os.close(slave)
@@ -164,6 +186,7 @@ try:
         if r:
             try:
                 chunk = os.read(master, 4096)
+                output += chunk
                 respond_to_queries(master, chunk)
             except OSError:
                 break
@@ -191,7 +214,13 @@ try:
     pct = d.get('used_percentage', '?')
     updated = d.get('updated_at', 0)
     if updated != before_updated:
+        # 成功時は claude_usage.sh 側が auth_error を解消済みのはずだが、念のため明示的に解除する
+        write_auth_error(False)
         print(f"{ts} updated: {pct}%")
+    elif b'/login' in output:
+        # 「Login expired」「Not logged in」はどちらもメッセージ内に "/login" を含む
+        write_auth_error(True)
+        print(f"{ts} failed: not logged in (run `claude` then /login)")
     else:
         print(f"{ts} failed: cache not updated")
 except Exception:

@@ -53,6 +53,7 @@ existing.update({
     "resets_at": resets_at,
     "remaining_secs": remaining_secs,
     "updated_at": now_ts,
+    "auth_error": False,  # statusLineが発火できた時点でログインは正常
 })
 tmp_name = None
 try:

@@ -198,6 +198,26 @@ else
     FAIL=$((FAIL + 1))
 fi
 
+# ── シナリオ9：auth_error=trueのキャッシュはmenubarに「ログイン切れ」表示される ──
+python3 -c "
+import json, time
+json.dump({'used_percentage': 42, 'updated_at': time.time(), 'auth_error': True, 'auth_error_at': time.time()}, open('$TMP_CACHE', 'w'))
+"
+result=$(run_menubar_logic "$TMP_CACHE")
+check "統合9: auth_error時にログイン切れ表示" "$result" "ログイン切れ"
+
+# ── シナリオ10：claude_usage.shが正常応答するとauth_errorがfalseに解除される ──
+echo '{"rate_limits":{"five_hour":{"used_percentage":50,"resets_at":9999999999}}}' \
+    | bash "$ROOT_DIR/claude_usage.sh" > /dev/null
+result=$(run_menubar_logic "$TMP_CACHE")
+if echo "$result" | grep -qF "ログイン切れ"; then
+    echo "FAIL: 統合10: claude_usage.sh成功後もログイン切れ表示のまま"
+    FAIL=$((FAIL + 1))
+else
+    echo "PASS: 統合10: claude_usage.sh成功でauth_error解除、通常表示に復帰 = $result"
+    PASS=$((PASS + 1))
+fi
+
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

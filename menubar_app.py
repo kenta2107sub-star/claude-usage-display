@@ -52,6 +52,9 @@ def build_title(data):
     if data is None:
         return "📊 ?"
 
+    if data.get("auth_error"):
+        return "📊 ⚠️ログイン切れ"
+
     pct = data.get("used_percentage", 0)
     resets_at = data.get("resets_at")
     updated_at = data.get("updated_at") or None
@@ -66,6 +69,10 @@ def build_title(data):
 def build_detail(data, fresh):
     if data is None:
         return "データなし（Claude Code CLI を一度起動してください）"
+
+    if data.get("auth_error"):
+        age = _age_str(data.get("auth_error_at"))
+        return f"ログイン切れ（{age}検知） | ターミナルで claude を起動し /login を実行してください"
 
     now = time.time()
     pct = data.get("used_percentage", "?")
