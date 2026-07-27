@@ -5,3 +5,5 @@ __pycache__/
 .claude/
 progress.md
 CLAUDE.md
+test_report.md
+code_review_report.md

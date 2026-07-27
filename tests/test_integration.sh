@@ -218,6 +218,16 @@ else
     PASS=$((PASS + 1))
 fi
 
+# ── シナリオ11：同一ウィンドウ内でused_percentageが後退する場合は既存の高い値を維持する ──
+# （長時間起動中のセッションが古いrate_limitsスナップショットを送ってきて
+#   別セッション/ポーラーが取得した新しい値を後退上書きしてしまう不具合の再発防止）
+echo '{"rate_limits":{"five_hour":{"used_percentage":81,"resets_at":9999999999}}}' \
+    | bash "$ROOT_DIR/claude_usage.sh" > /dev/null
+echo '{"rate_limits":{"five_hour":{"used_percentage":14,"resets_at":9999999999}}}' \
+    | bash "$ROOT_DIR/claude_usage.sh" > /dev/null
+result=$(run_menubar_logic "$TMP_CACHE")
+check "統合11: 同一ウィンドウ内で低い値が来ても既存の高い値を維持" "$result" "📊 81%"
+
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

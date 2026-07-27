@@ -28,6 +28,28 @@ if resets_at and now_ts >= resets_at:
     used_pct = 0
 
 pct = round(used_pct)
+
+# メニューバーアプリ用キャッシュをアトミックに書き出す（既存フィールドをマージ）
+_cache_env = os.environ.get("CLAUDE_USAGE_CACHE", "")
+cache_path = pathlib.Path(_cache_env) if _cache_env else pathlib.Path.home() / ".claude" / "claude_usage_cache.json"
+try:
+    existing = json.loads(cache_path.read_text())
+except Exception:
+    existing = {}
+
+existing_pct = existing.get("used_percentage")
+existing_resets_at = existing.get("resets_at")
+
+# 同一ウィンドウ内ではused_percentageは減らない。長時間起動中のセッションが
+# 古いrate_limitsを送ってきて新しい値を後退上書きするのを防ぐため、大きい方を採用する。
+if (
+    existing_resets_at is not None
+    and resets_at == existing_resets_at
+    and isinstance(existing_pct, (int, float))
+    and existing_pct > pct
+):
+    pct = existing_pct
+
 parts = [f"📊 {pct}%"]
 
 remaining_secs = 0
@@ -39,14 +61,6 @@ if resets_at and now_ts < resets_at:
         parts.append(f"⏱ {h}h{m:02d}m でリセット")
     else:
         parts.append(f"⏱ {m}m でリセット")
-
-# メニューバーアプリ用キャッシュをアトミックに書き出す（既存フィールドをマージ）
-_cache_env = os.environ.get("CLAUDE_USAGE_CACHE", "")
-cache_path = pathlib.Path(_cache_env) if _cache_env else pathlib.Path.home() / ".claude" / "claude_usage_cache.json"
-try:
-    existing = json.loads(cache_path.read_text())
-except Exception:
-    existing = {}
 
 existing.update({
     "used_percentage": pct,
